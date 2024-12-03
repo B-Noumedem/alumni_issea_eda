@@ -1,0 +1,198 @@
+---
+title: "Alumni en chiffre"
+author: "Arielle et Boris"
+date: "2024-11-25"
+output: html_document
+---
+# Importation des données
+
+```{r}
+library(tidyverse)
+library(readxl)
+```
+
+```{r}
+data_1 = read_csv("ANCIENS_ISSEA.csv")
+data_2 = read_excel("Base_VF_PROJET.xlsx", sheet = "Masjuscule")
+#data_3 = read_csv("Formulaire sans titre.csv")
+data_3 = read_excel("RENOVATION V1 2022.xlsx")
+data_anniv = read_csv("quarante_ans_issea.csv")
+```
+
+```{r}
+View(data_1)
+View(data_2)
+View(data_3)
+View(data_anniv)
+```
+
+# Traitements des différentes bases
+
+
+
+
+```{r}
+data_1 = data_1 %>% select(-c("Date de Naissance", "Téléphone", "Quelle formation avez-vous suivie à l'ISSEA ??", "Profil LinkedIn (mettez aucun, si vous n'avez pas)", "Des suggestions d'améliorations", "Avez-vous participez à des projets, fait des publications ou reçu une distinction ?", "Nom d'utilisateur", "Ville de résidence", "Quelle filière avez-vous suivie ?", "Si oui, lesquels(les) ? (Sinon, mettez Aucun)", "Nombre d'année dans cette structure ?", "Quelle est votre plus haut diplôme actuellement ?(remettre le précédent , si pas de diplôme après celui-ci)", "Année d'obtention"))
+
+data_2$`Nom & Prénom` = paste(data_2$Nom, " ", data_2$Prénom)
+data_2 = data_2 %>% select(-c("Nom", "Prénom"))
+
+data_3 = data_3[, -c( 8, 16, 20:28, 37:91,96:354)]
+data_3 = data_3 %>% select(-c("Quelle a été votre voie de spécialisation en ISE ?...95", "Aviez-vous choisi une voie de spécialisation en ISE ?", "Statut dans l'emploi...36", "Adresse mail de la structure...32", "Par quel moyen votre formation a été faite ?...13", "Quel est votre numéro de téléphone actuel ? (commencez par l'indicatif téléphonique du pays)", ))
+
+data_anniv = data_anniv %>% select(-c("Vidéo", "Autorisez-vous que votre vidéo soit utilisée pour la bande d'annonce de l'évènement ?", "Autorisez-vous l'ajout de vos informations dans une base de données Alumni ?", "Aimeriez-vous être contacté pour participer à une table ronde durant la journée des Alumni ?", "Assisteriez-vous à la journée des Alumni ?"))
+```
+
+
+
+```{r}
+colnames(data_1)
+```
+
+```{r}
+colnames(data_2)
+```
+
+```{r}
+colnames(data_3)
+```
+
+```{r}
+colnames(data_anniv)
+```
+```{r}
+# Renommer les colonnes dans chaque dataset
+data_1 <- data_1 %>%
+  rename(
+    Horodateur = "Horodateur",
+    Adresse_Email = "Adresse mail",
+    Nom_Prenom = "Noms et Prénoms",
+    Pays_Residence = "Pays de résidence",
+    Nationalite = "Nationalité",
+    Poste = "Quel poste y occupez-vous ?",
+    Secteur_Activite = "Dans quel domaine exerce votre structure ?",
+    Diplome_Obtenu = "Quel diplôme avez-vous obtenu?",
+    Annee_Diplomation_ISSEA = "Année d'obtention dudit diplôme (Avant 2024)",
+    Nom_Entreprise = "Quel est votre employeur actuel ? ( si propre compte, veuillez préciser)"
+  )
+
+data_2 <- data_2 %>%
+  rename(
+    Poste = "Poste actuel",
+    Diplome_Obtenu = "Formation",
+    Secteur_Activite = "Secteur d'activité",
+    Nom_Prenom = "Nom & Prénom",
+    Annee_Obtention = "GraduationYear"
+  )
+
+data_3 <- data_3 %>%
+  rename(
+    Horodateur = "Horodateur",
+    Adresse_Email = "Adresse e-mail",
+    Nationalite = "Quel est votre pays d’origine ?",
+    Pays_Residence = "Quel est votre pays de résidence actuel ?",
+    Poste = "Poste occupé dans l'emploi...29",
+    Secteur_Activite = "Domaine d'activité de la structure...34",
+    Diplome_Obtenu = "Quel(s) diplôme(s) avez-vous obtenu à l’ISSEA ?",
+    Nom_Entreprise = "Nom de l'entreprise/Structure...31",
+    Formations_Post_ISSEA_Domaine = "Dans quel domaine se situe cette formation post-ISSEA ?...18",
+    Formation_Post_ISSEA_Ecole = "Nom de l’Institut dans lequel vous avez subi cette formation...12"
+  )
+
+data_anniv <- data_anniv %>%
+  rename(
+    Horodateur = "Horodateur",
+    Adresse_Email = "Adresse e-mail",
+    Nom_Prenom = "Nom & Prénom",
+    Nationalite = "Pays d'origine",
+    Pays_Residence = "Pays où vous exercez votre activité",
+    Diplome_Obtenu = "Cycle",
+    Annee_Diplomation_ISSEA = "Promotion ISSEA (année de sortie)",
+    Secteur_Activite = "Secteur d'activité",
+    Poste = "Profession",
+    Nom_Entreprise = "Nom de l'Entreprise / Organisation",
+    Formations_Post_ISSEA_Domaine = "Formations post ISSEA - Domaine",
+    Formation_Post_ISSEA_Ecole = "Formation post ISSEA - École"
+  )
+
+```
+
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+# Harmoniser les colonnes problématiques
+data_1 <- data_1 %>%
+  mutate(
+    Horodateur = lubridate::ymd_hms(Horodateur),
+    Annee_Diplomation_ISSEA = as.character(Annee_Diplomation_ISSEA),
+    source = "data-1",
+  )
+
+data_2 <- data_2 %>%
+  mutate(
+    source = "data-2",
+    # Horodateur = ymd_hms(Horodateur), # Si Horodateur n'existe pas dans data_2, cette ligne peut être supprimée
+    # Annee_Diplomation_ISSEA = as.character(Annee_Diplomation_ISSEA) # Si elle existe, sinon ignorer cette ligne
+  )
+
+data_3 <- data_3 %>%
+  mutate(
+    source = "data-3",
+    Horodateur = lubridate::ymd_hms(Horodateur),
+    # Annee_Diplomation_ISSEA = as.character(Annee_Diplomation_ISSEA)
+  )
+
+data_anniv <- data_anniv %>%
+  mutate(
+    source = "data-anniv",
+    Horodateur = lubridate::ymd_hms(Horodateur),
+    Annee_Diplomation_ISSEA = as.character(Annee_Diplomation_ISSEA)
+  )
+
+data_1[, "source"] = "data-1"
+data_3[, "source"] = "data-3"
+data_anniv[, "source"] = "data-anniv"
+```
+
+```{r}
+all_columns <- Reduce(union, list(names(data_anniv), names(data_1), names(data_3)))
+# Add missing columns as NA
+data_anniv[setdiff(all_columns, names(data_anniv))] <- NA
+data_1[setdiff(all_columns, names(data_1))] <- NA
+data_3[setdiff(all_columns, names(data_3))] <- NA
+```
+
+```{r}
+library(dplyr)
+
+# Concaténer les bases
+data_concat <- bind_rows(data_anniv[, all_columns], data_1[, all_columns], data_3[, all_columns]) # data_2
+
+# Vérifier la structure finale
+glimpse(data_concat)
+
+```
+## Drop duplicates
+
+```{r}
+table(table(data_concat$Adresse_Email))
+```
+
+```{r}
+data_final <- data_concat[!duplicated(data_concat$Adresse_Email), ]
+```
+
+
+```{r}
+saveRDS(data_final, "data_final2.rds")
+```
+
+
+
+
+
+
+
+

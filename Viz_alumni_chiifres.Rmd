@@ -1,0 +1,1067 @@
+---
+title: "Alumni en chiffre - Data Visualisation"
+author: "Arielle et Boris"
+date: "2024-11-26"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+knitr::opts_chunk$set(echo=FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(dplyr)
+library(DataExplorer)
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+library(lubridate)
+library(stringr)
+library(naniar)
+library(plotly)
+library(scales)
+library(ggpubr)
+library(sf)
+library(leaflet)
+```
+
+
+```{r}
+couleurs = list(
+  
+    primaire = "#5F9595",
+    secondaire = "#9EC3BB",
+    neutre1 = "#dbece5",
+    neutre2 = "#BAC9CE",
+    multi = c("#7eaaaa","#D68F84", "#f9e4c2","#C4C99C","#9EC3BB","#9ECAE1","#C4D7D1","#BEC1AC","#AAB8BB","#F5D1C3","#D3E3D6", "#BAC9CE", "#dfe9e9"),
+    degrade = c("#5F9595", "#7eaaaa", "#9fbfbf", "#bfd4d4", "#cfdfdf", "#dfe9e9")
+)
+
+```
+
+
+# load data
+
+```{r}
+data = readRDS('data_final2.rds')
+data[, 'ID'] = 1:nrow(data)
+print(dim(data))
+head(data)
+# writexl::write_xlsx(data, "datafinal.xlsx")
+```
+
+## Sexe 
+
+```{r}
+p_data = data %>% 
+              filter(!is.na(Genre)) %>%
+              count(Genre) %>% 
+                        summarise(Sexe = str_to_title(Genre),
+                                  freq = n/sum(n),
+                                  freq_label = paste0(round(freq * 100, 1), "%"))
+
+center <- list(
+  x = 0.5,
+  y = 0.5,
+  text = paste0("<b>", sum(!is.na(data$Genre)), " </b> <br> Répondants"),
+  xref = "x",
+  yref = "y",
+  showarrow = FALSE
+)
+
+fig <-plot_ly(p_data[!is.na(p_data$Sexe), ], labels = ~Sexe, values = ~freq)%>%
+                      add_pie(hole = 0.5, marker = list(colors = c(couleurs$primaire, couleurs$neutre1)))%>%
+                      layout(showlegend = T,
+                      annotations = center,
+                      xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                      yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                      legend = list(orientation = "h", x = 0.43, y = 1.1, ncol=3))
+
+fig
+```
+
+## Diplôme obtenu
+
+
+```{r}
+
+# Fonction personnalisée de recodage
+recode_diplome <- function(x) {
+  if (grepl("ISE", x)) {
+    return("ISE")
+  } else if (grepl("IAS", x)) {
+    return("IAS")
+  } else if (grepl("Licences professionnelle", x)) {
+    return("Licences \nPro.")
+  } else if (grepl("TSS", x)) {
+    return("TSS")
+  } else if (grepl("LGTSD", x)) {
+    return("Licences \nPro.")
+  } else if (grepl("L2BD", x)) {
+    return("Licences \nPro.")
+  } else if (grepl("Masters professionnels", x)) {
+    return("Masters \nPro.")
+  } else {
+    return(x)
+  }
+}
+
+data$diplome_2 <- sapply(data$Diplome_Obtenu, recode_diplome)
+```
+
+
+```{r}
+library(dplyr)
+library(plotly)
+
+# Préparation des données avec tri
+p_data <- data %>% 
+  filter(!is.na(diplome_2)) %>%
+  count(diplome_2) %>% 
+  summarise(level = diplome_2,
+            freq = n/sum(n) * 100 ,
+            freq_label = paste0(round(freq, 1), "%")) %>%
+  arrange(desc(freq))  # Tri décroissant par fréquence
+
+# Création du graphique en barres horizontales triées
+fig <- plot_ly(p_data[!is.na(p_data$level), ], 
+               x = ~freq, 
+               y = ~reorder(level, freq),  # Réordonner les diplômes
+               type = 'bar', 
+               orientation = 'h',
+               text = ~freq_label,
+               textposition = 'auto',
+               marker = list(color = couleurs$multi, 
+                             line = list(color = 'rgb(8,48,107)', width = .5))) %>%
+  layout(
+        title = list(
+          text = "<b>Répartition des diplômes obtenus</b>", 
+          font = list(size = 16, color = '#333')
+        ),
+        xaxis = list(
+          title = "<b>Fréquence (%)</b>",
+          ticksuffix = "%",  # Ajout du suffixe pour indiquer les pourcentages
+          gridcolor = 'rgba(200,200,200,0.3)'  # Lignes de grille discrètes
+        ),
+       yaxis = list(title = " ", title_standoff = 20),
+       margin = list(l = 10),
+       showlegend = FALSE)
+
+fig
+
+```
+
+## Année de diplômation
+
+```{r}
+# Fonction personnalisée de recodage
+recode_ann_diplomation <- function(x) {
+  if (grepl("2017", x)) {
+    return("2017")
+  } else if (grepl("2005", x)) {
+    return("2005")
+  } else if (grepl("1991", x)) {
+    return("1991")
+  } else if (grepl("^(2027|3011|0)$", x)) {
+    return(NA)
+  } else {
+    return(x)
+  }
+}
+
+data$Annee_Diplomation_ISSEA2 <- sapply(data$Annee_Diplomation_ISSEA, recode_ann_diplomation)
+```
+
+
+```{r}
+# Préparation des données avec tri
+p_data <- data %>% 
+  filter(!is.na(Annee_Diplomation_ISSEA2)) %>%
+  count(Annee_Diplomation_ISSEA2) %>% 
+  summarise(level = Annee_Diplomation_ISSEA2,
+            freq = n, #/sum(n) * 100 ,
+            freq_label = paste0(round(freq/ sum(n) * 100, 1), "%")) %>%
+  arrange(desc(freq))  # Tri décroissant par fréquence
+```
+
+
+```{r}
+fig <- plot_ly(p_data[!is.na(p_data$level), ], 
+               x = ~level, 
+               y = ~freq,  
+               type = 'bar', 
+               orientation = 'v',
+               text = ~freq_label,
+               textposition = 'auto',
+               marker = list(
+                 color = couleurs$secondaire, 
+                 opacity = 0.8,  # Ajout de la transparence
+                 line = list(color = couleurs$primaire, width = 1) # Ligne plus visible
+               )
+) %>%
+  layout(
+        title = list(text = "<b>Année de  diplômation des répondans </b>", 
+                     font = list(size = 16, color = '#333')),
+        xaxis = list(
+          title = "<b>Année de diplomation</b>",
+          tickangle = -45,  # Rotation des labels pour économiser de l'espace
+          tickfont = list(size = 12)
+        ),
+        yaxis = list(
+          title = "<b>Effectif</b>",
+          gridcolor = 'rgba(200,200,200,0.3)' # Lignes de grille discrètes
+        ),
+        bargap = 0.1, # Réduction de l’espace entre les barres
+        margin = list(l = 50, r = 30, b = 80, t = 50),
+        plot_bgcolor = 'rgba(240,240,240,0.1)', # Fond du graphique clair
+        showlegend = FALSE
+  )
+
+fig
+```
+
+
+## Nationalité
+
+```{r}
+recode_nationalite <- function(x) {
+  if (grepl("(?i)cameroun(e|ais|aise|ai)$", x)) {
+    return("Cameroun")
+  } else if (grepl("(?i)bénin|benin", x)) {
+    return("Bénin")
+  } else if (grepl("(?i)burkina|burkinabè", x)) {
+    return("Burkina Faso")
+  } else if (grepl("(?i)centrafrique|centrafricaine|rca", x)) {
+    return("RCA")
+  } else if (grepl("(?i)tchad|tchadienne", x)) {
+    return("Tchad")
+  } else if (grepl("(?i)congo", x) & !grepl("république démocratique", x, ignore.case = TRUE)) {
+    return("Congo")
+  } else if (grepl("(?i)république démocratique du congo|rdc", x)) {
+    return("RDC")
+  } else if (grepl("(?i)guinée equatoriale|equatoguinéen|Équato-guinéen|Guinée Équatoriale|Équato-guinéen", x)) {
+    return("Guinée Équatoriale")
+  } else if (grepl("(?i)gabon", x)) {
+    return("Gabon")
+  } else if (grepl("(?i)madagascar", x)) {
+    return("Madagascar")
+  } else if (grepl("(?i)niger", x)) {
+    return("Niger")
+  } else if (grepl("(?i)togo", x)) {
+    return("Togo")
+  } else if (grepl("(?i)BURUNDI", x, ignore.case=TRUE)) {
+    return("Burundi")
+  } else {
+    return(x)
+  }
+}
+
+# Colonnes contenant des informations supplémentaires sur le pays d'origine
+other_pay_sorigne <- c("Autre pays d'origine", "Si autre pays d'origine, précisez")
+
+# Vérification et mise à jour de la colonne Nationalite
+data <- data %>%
+  mutate(
+    Nationalite = ifelse(
+      Nationalite == "Autre" | is.na(Nationalite),  # Condition pour les valeurs à mettre à jour
+      coalesce(!!!syms(other_pay_sorigne)),         # Prend la première valeur non NA parmi les colonnes supplémentaires
+      Nationalite                                    # Garde la valeur originale sinon
+    )
+  )
+
+
+# Application de la fonction sur les données
+data$Nationalite_recodee <- sapply(data$Nationalite, recode_nationalite)
+
+# Vérification du résultat
+table(data$Nationalite_recodee)
+```
+
+
+```{r}
+# Préparation des données
+nationalite_data <- data %>%
+  filter(!is.na(Nationalite_recodee)) %>%
+  count(Nationalite_recodee) %>%
+  mutate(freq = n / sum(n) * 100)  # Calcul des pourcentages
+
+# Création des nœuds
+nodes <- data.frame(
+  name = c(nationalite_data$Nationalite_recodee, "Alumni ISSEA")
+)
+
+# Création des liens
+links <- data.frame(
+  source = 0:(nrow(nationalite_data) - 1),  # Nationalités (source)
+  target = nrow(nationalite_data),          # ISSEA Students (cible)
+  value = nationalite_data$freq,
+  text = paste0(round(nationalite_data$freq, 1), "%"),  # Texte des pourcentages
+  couleur = c("#7eaaaa","#D68F84", "#f9e4c2","#C4D7D1","#9EC3BB","#9ECAE1", "#C4C99C",
+              "#BEC1AC","#AAB8BB","#F5D1C3","#D3E3D6", "#BAC9CE", "#dfe9e9", "#bfd4d4",
+              "#D0E0DF", "#E8C1BB", "#F8DACD", "#B3CBCB", "#A1BFBF", "#E6DED8", "#C8DAD8")[1:nrow(nationalite_data)]
+)
+
+# Création du diagramme de Sankey
+fig <- plot_ly(
+  type = "sankey",
+  arrangement = "perpendicular",
+  node = list(
+    label = nodes$name,
+    color = c(links$couleur, couleurs$primaire), # rep("#AED6F1", nrow(nationalite_data))
+    pad = 15,
+    thickness = 20,
+    x = c(rep(0.1, nrow(nationalite_data)), 0.9),  # Nationalités à gauche, ISSEA à droite
+    y = NULL
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value,
+    color = links$couleur,  # Couleur personnalisée (#F5D1C3)
+    hoverinfo = "text",
+    text = links$text
+  )
+) %>%
+  layout(
+    #title = "",
+    font = list(size = 14), 
+    margin = list(l = 50, r = 10, t=50),  # Espace supplémentaire à gauche pour les labels
+    # xaxis = list(showticklabels = FALSE),
+    yaxis = list(title="<b>Nationalité</b>", showticklabels = FALSE)
+  ) %>%
+  
+  add_annotations(c("<b>Pays d'origine</b>\n<sup>Avant ISSEA</sup>"),
+                  x = c(0), y = c(1.1), showarrow=FALSE, 
+                  align = "left")
+
+fig
+```
+
+## Pays d'activité
+
+```{r}
+recode_pays_residence <- function(x) {
+  if (grepl("(?i)cameroun|cameron|cameroon|cameroun/france", x)) {
+    return("Cameroun")
+  } else if (grepl("(?i)benin", x)) {
+    return("Bénin")
+  } else if (grepl("(?i)burkina", x)) {
+    return("Burkina Faso")
+  } else if (grepl("(?i)côte d'ivoire", x)) {
+    return("Côte d'Ivoire")
+  } else if (grepl("(?i)congo(-brazzaville| brazzaville)?$", x) & !grepl("république démocratique", x, ignore.case = TRUE)) {
+    return("Congo")
+  } else if (grepl("(?i)république démocratique du congo|rdc", x)) {
+    return("RDC")
+  } else if (grepl("(?i)guinée[- ]?équatoriale|Guinée Equatoriale", x)) {
+    return("Guinée Équatoriale")
+  } else if (grepl("(?i)france", x)) {
+    return("France")
+  } else if (grepl("(?i)tchad", x)) {
+    return("Tchad")
+  } else if (grepl("(?i)togo", x)) {
+    return("Togo")
+  } else if (grepl("(?i)états[- ]unis|united states|washington|Etats-Unis|USA", x)) {
+    return("États-Unis")
+  } else if (grepl("(?i)gabon", x)) {
+    return("Gabon")
+  } else if (grepl("(?i)madagascar", x)) {
+    return("Madagascar")
+  } else if (grepl("(?i)Ras", x)) {
+    return(NA)
+  } else {
+    return(x)
+  }
+}
+
+# Colonnes contenant des informations supplémentaires sur le pays d'origine
+other_pays_residence <- c("Autre pays de résidence")
+
+# Vérification et mise à jour de la colonne Nationalite
+data <- data %>%
+  mutate(
+    Pays_Residence = ifelse(
+      Pays_Residence == "Autre" | is.na(Pays_Residence),  # Condition pour les valeurs à mettre à jour
+      coalesce(!!!syms(other_pays_residence)),         # Prend la première valeur non NA parmi les colonnes supplémentaires
+      Pays_Residence                                    # Garde la valeur originale sinon
+    )
+  )
+
+
+data$Pays_Residence_recode <- sapply(data$Pays_Residence, recode_pays_residence)
+table(data$Pays_Residence_recode )
+```
+
+```{r}
+# # Préparation des données
+# residence_data <- data %>%
+#   filter(!is.na(Pays_Residence_recode)) %>%
+#   count(Pays_Residence_recode) %>%
+#   mutate(freq = n / sum(n) * 100)  # Calcul des pourcentages
+# 
+# # Création des nœuds
+# nodes <- data.frame(
+#   name = c(residence_data$Pays_Residence_recode, "Alumni ISSEA")
+# )
+# 
+# # Création des liens
+# links <- data.frame(
+#   source = 0:(nrow(residence_data) - 1),  # Nationalités (source)
+#   target = nrow(residence_data),          # ISSEA Students (cible)
+#   value = residence_data$freq,
+#   text = paste0(round(residence_data$freq, 1), "%"),  # Texte des pourcentages
+#   couleur = c("#7eaaaa","#D68F84", "#f9e4c2","#C4C99C","#9EC3BB","#9ECAE1", "#C4D7D1",
+#               "#F5D1C3", "#BEC1AC","#AAB8BB","#D3E3D6", "#BAC9CE", "#dfe9e9", "#bfd4d4",
+#               "#D0E0DF", "#E8C1BB", "#F8DACD", "#B3CBCB", "#A1BFBF", "#E6DED8", "#C8DAD8",
+#               "#e0f8d6", "#B3C6AB", "#C6E5E5", "#A56879")[1:nrow(residence_data)]
+# )
+# 
+# # Création du diagramme de Sankey
+# fig <- plot_ly(
+#   type = "sankey",
+#   arrangement = "perpendicular",
+#   node = list(
+#     label = nodes$name,
+#     color = c(links$couleur, couleurs$primaire), # rep("#AED6F1", nrow(nationalite_data))
+#     pad = 15,
+#     thickness = 20,
+#     x = c(rep(0.1, nrow(residence_data)), 0.9),  # Nationalités à gauche, ISSEA à droite
+#     y = NULL
+#   ),
+#   link = list(
+#     source = links$source,
+#     target = links$target,
+#     value = links$value,
+#     color = links$couleur,  # Couleur personnalisée (#F5D1C3)
+#     hoverinfo = "text",
+#     text = links$text
+#   )
+# ) %>%
+#   layout(
+#     #title = "",
+#     font = list(size = 14), 
+#     margin = list(l = 50, r = 10, t=50),  # Espace supplémentaire à gauche pour les labels
+#     yaxis = list(title="<b>Nationalité</b>", showticklabels = FALSE)
+#   ) %>%
+#   
+#   add_annotations(c("<b>Pays de résidence</b>\n<sup>Après ISSEA</sup>"),
+#                   x = c(0), y = c(1.1), showarrow=FALSE, 
+#                   align = "left")
+# 
+# fig
+```
+
+
+
+
+```{r}
+# Préparation des données
+residence_data <- data %>%
+  filter(!is.na(Pays_Residence_recode)) %>%
+  count(Pays_Residence_recode) %>%
+  mutate(freq = n / sum(n) * 100)  # Calcul des pourcentages
+
+# Création des nœuds
+nodes <- data.frame(
+  name = c("Alumni ISSEA", residence_data$Pays_Residence_recode)
+)
+
+# Création des liens
+links <- data.frame(
+  source = rep(0, nrow(residence_data)),  # Alumni ISSEA (source unique)
+  target = 1:nrow(residence_data),        # Pays de résidence (cible)
+  value = residence_data$freq,
+  text = paste0(round(residence_data$freq, 1), "%"),  # Texte des pourcentages
+  couleur = c("#7eaaaa","#D68F84", "#f9e4c2","#C4C99C","#9EC3BB","#9ECAE1", "#C4D7D1",
+              "#F5D1C3", "#BEC1AC","#AAB8BB","#D3E3D6", "#BAC9CE", "#dfe9e9", "#bfd4d4",
+              "#D0E0DF", "#E8C1BB", "#F8DACD", "#B3CBCB", "#A1BFBF", "#E6DED8", "#C8DAD8",
+              "#e0f8d6", "#B3C6AB", "#C6E5E5", "#A56879")[1:nrow(residence_data)]
+)
+
+# Création du diagramme de Sankey
+fig <- plot_ly(
+  type = "sankey",
+  arrangement = "perpendicular",
+  node = list(
+    label = nodes$name,
+    color = c(couleurs$primaire, links$couleur),  # Couleur des nœuds
+    pad = 10,
+    thickness = 20,
+    x = c(0.1, rep(0.9, nrow(residence_data))),  # Alumni à gauche, pays à droite
+    y = NULL
+  ),
+  link = list(
+    source = links$source,
+    target = links$target,
+    value = links$value,
+    color = links$couleur,  
+    hoverinfo = "text",
+    text = links$text
+  )
+) %>%
+  layout(
+    font = list(size = 13),
+    margin = list(l = 150, r = 50, t = 50),
+    yaxis = list(title = "<b>Pays de résidence</b>", showticklabels = FALSE)
+  ) %>%
+  add_annotations(
+    text = "<b>Pays de résidence</b>\n<sup>Après ISSEA</sup>",
+    x = 0, y = 1.1,
+    showarrow = FALSE,
+    align = "left",
+    xref = "paper",
+    yref = "paper",
+    font = list(size = 14)
+  )
+
+fig
+```
+
+
+```{r}
+# # Préparation des données avec codes ISO3
+# library(countrycode)
+# costum_match = c(
+#   "Pays Bas" = "NLD",
+#   "RCA" = "CAF")
+# # 
+# # Préparation des données avec codes ISO3
+# residence_data <- data %>%
+#   filter(!is.na(Pays_Residence_recode)) %>%
+#   count(Pays_Residence_recode) %>%
+#   mutate(freq = n / sum(n) * 100,
+#          iso3 = countrycode(Pays_Residence_recode, "country.name.fr", "iso3c", custom_match=costum_match))
+# 
+# # Création de la carte choroplèthe
+# fig <- plot_ly(
+#   type = 'choropleth',
+#   locations = residence_data$iso3,
+#   z = residence_data$freq,
+#   text = paste0(residence_data$Pays_Residence_recode, ": ", residence_data$n, " alumni (", round(residence_data$freq, 1), "%)"),
+#   colorscale = list(c(0, 1), c(couleurs$neutre2, couleurs$primaire)),
+#   color_continuous_scale="Viridis",
+#   colorbar = list(title = "Proportion des \nAlumni (%)"),
+#   marker = list(line = list(color = "rgb(255,255,255)", width = 1.5))  # Contours blancs
+# ) %>%
+#   layout(
+#     title = "Alumni ISSEA par Pays de résidence",
+#     geo = list(
+#       showframe = FALSE,
+#       showcoastlines = TRUE,
+#       coastlinecolor = "rgb(169, 169, 169)",  # Gris clair pour les côtes
+#       projection = list(type = 'equirectangular')
+#     )
+#   )
+# 
+# fig
+```
+
+```{r}
+library(dplyr)
+library(countrycode)
+library(plotly)
+
+# Mapping personnalisé des pays et leurs codes ISO3
+costum_match <- c(
+  "Pays Bas" = "NLD",
+  "RCA" = "CAF"
+)
+
+# Préparation des données avec codes ISO3 et fréquence
+residence_data <- data %>%
+  filter(!is.na(Pays_Residence_recode)) %>%
+  count(Pays_Residence_recode) %>%
+  mutate(freq = n / sum(n) * 100,
+         iso3 = countrycode(Pays_Residence_recode, "country.name.fr", "iso3c", custom_match = costum_match))
+
+# Définir les couleurs discrètes en fonction des tranches de fréquence
+color_bins <- c(0, 2, 5, 10, 20, 50, 100)  # Tranches de fréquence
+color_labels <- c("< 2%", "2% - 5%", "5% - 10%", "10% - 20%", "20% - 50%", "> 50%")  # Labels pour les couleurs
+
+# Assignation des couleurs à chaque tranche
+# color_scale <- couleurs$degrade  # Palette de couleurs discrete
+
+# Ajouter une colonne avec les couleurs en fonction des tranches de fréquence
+residence_data$color_group <- cut(residence_data$freq, breaks = color_bins, labels = color_labels, include.lowest = TRUE)
+
+# Création de la carte choroplèthe
+fig <- plot_ly(
+  type = 'choropleth',
+  locations = residence_data$iso3,
+  z = residence_data$freq,  # Utiliser la fréquence au lieu du nombre brut
+  text = paste0(residence_data$Pays_Residence_recode, ": ", residence_data$n, " alumni (", round(residence_data$freq, 1), "%)"),
+  colorscale = couleurs$degrade,
+  colorbar = list(title = "Fréquence (%)"),
+  marker = list(line = list(color = "rgb(255,255,255)", width = 1.5))  # Contours blancs
+) %>%
+  layout(
+    title = "Alumni ISSEA par Pays de résidence",
+    geo = list(
+      showframe = FALSE,
+      showcoastlines = TRUE,
+      coastlinecolor = "rgb(169, 169, 169)",  # Gris clair pour les côtes
+      projection = list(type = 'equirectangular')
+    )
+  )
+
+fig
+
+```
+
+
+## Poste des Alumni 
+
+```{r}
+# data[is.na(data$Poste), "Poste"]
+missing_poste = is.na(data$Poste)
+data[missing_poste, "Poste"] =  data[missing_poste, "Poste actuellement occupé"]
+
+generic_stat = grepl("(?i)Statisticien Economiste|Ingénieur Statisticien Economiste|Statisticien|Statisticien", tolower(data$Poste))
+data[generic_stat & !is.na(data["Poste actuellement occupé"]), "Poste"] = data[generic_stat & !is.na(data["Poste actuellement occupé"]), "Poste actuellement occupé"]
+```
+
+
+
+
+```{r}
+recoder_poste <- function(poste) {
+  case_when(
+    
+    # Étudiant/Stagiaire
+    grepl("(?i)étudiant|stagiaire|Doctorante|reprise d'études", poste) ~ "En formation",
+    
+    # Actuaire
+    grepl("(?i)actuaire|actuariat|CEA", poste) ~ "Actuaire",
+
+    # Consultant
+    grepl("(?i)consultant|consultante", poste) ~ "Consultant",
+
+    # Data Scientist/Analyst
+    grepl("(?i)data scientist|data science", poste) ~ "Data Scientist",
+    grepl("(?i)data analyst", poste) ~ "Data Analyst",
+
+    # Statisticien/Economiste
+    grepl("(?i)statisticien|statisticienne|Statistician|Statistique|Demographe", poste) & !grepl("(?i)économiste|economiste", poste) ~ "Statisticien",
+    grepl("(?i)économiste|economiste|economist|Comptable|Agent technique|Economics|Cellule technique|Economie|Téchnicien", poste) ~ "Économiste", # & !grepl("(?i)statisticien", poste)
+    # grepl("(?i)statisticien|économiste|economiste", poste) ~ "Statisticien/Économiste",
+
+    # Enseignant
+    grepl("(?i)enseignant|chargé de cours|Professeur", poste) ~ "Enseignant",
+
+    # Analyste Risque/Quant
+    grepl("(?i)quant|analyste|gestionnaire des risques|finance analyst", poste) ~ "Analyste Risque/Quant",
+
+    # Informaticien
+    grepl("(?i)informaticien|computer scientist|Senior Data Officer|Data management officer", poste) ~ "Data Officer",
+
+    # Cadre Stat Eco. Administration
+    # grepl("(?i)suivi|évaluation|contrôle de gestion|chef de bureau|chef de service|cadre|superviseur|administrateur|agent technique|Contrôleuse de gestion Coordonnatrice|gestion budgétaire et financière|Contrôleuse de gestion", poste) ~ "Cadre Stat Eco. Administration",
+    
+    grepl("(?i)cadre", poste) ~ "Cadre Stat Eco. Administration",
+
+    # Responsable Administration
+    grepl("(?i)directeur|executive director|inspecteur|sous-directeur|chef|Contrôleuse de gestion|Superviseur", poste) ~ "Responsable Administration",
+
+    # Chargé d'études
+    grepl("(?i)chargé d'études|INGENIEUR D'ETUDE|Chargé d'Etudes|chargée d'études|Chargé des Études|Chargé d'études|Chargé de projets|Suivi éval|suivi-eval|Suivi et éval|Chargé d'Etude|Monitoring|chargé d’études", poste, ignore.case = TRUE) ~ "Chargé d'études/projets",
+
+    # Autre
+    grepl("(?i)autre|ras|aucun|Commissaire des armées|Gestionnaire des traités et facultatives|Mecanicien industriel|Sans emploi", poste) ~ "Autre",
+
+    # Default category
+    TRUE ~ "Autre"
+  )
+}
+
+# Application
+data$Poste_recode <- recoder_poste(data$Poste)
+data[is.na(data$Poste), 'Poste_recode'] = NA
+# Vérification des résultats
+table(data$Poste_recode)
+```
+```{r}
+unique(data[data$Poste_recode == "Autre", ]$Poste) # , data[data$Poste_recode == "Autre", "Poste"])
+```
+
+# Métier
+```{r}
+# Load necessary libraries
+library(plotly)
+library(dplyr)
+
+# Prepare the data: Count frequencies of each category in Poste_recode
+poste_data <- data %>%
+  filter(!is.na(Poste_recode) & (data$source == "data-anniv"))%>%
+  count(Poste_recode) %>%
+  arrange(desc(n))
+
+# Assuming 'couleurs$multi' is a vector of colors
+# Ensure it has enough colors for the categories
+color_palette <- couleurs$multi[1:nrow(poste_data)]
+
+# Create a treemap with custom colors
+fig <- plot_ly(
+  type = "treemap",
+  labels = poste_data$Poste_recode,
+  parents = rep("", nrow(poste_data)),  # No hierarchy, so all are at the same level
+  values = poste_data$n,
+  textinfo = "label+percent entry", # +value
+  marker = list(colors = color_palette)
+)
+
+# Show the plot
+fig
+```
+
+
+
+# Secteur d'activité
+
+```{r}
+autre_secteur = (data$Secteur_Activite == "Autre") & !is.na(data$Secteur_Activite)
+data[autre_secteur, "Secteur_Activite"] =  data[autre_secteur, "Autre (à préciser)...34"]
+```
+
+
+```{r}
+recoder_secteur <- function(secteur) {
+  case_when(
+    # Secteur : Assurance et Actuariat
+    grepl("(?i)assurance|actuariat|réassurance", secteur) ~ "Assurance",
+    
+    # Secteur : Banque et Finance
+    grepl("(?i)banque|finance|banque centrale|finance de marché|gestion de risque bancaire", secteur) ~ "Banque et Finance",
+    
+    # Secteur : Conseil et Audit
+    grepl("(?i)conseil|cabinet de conseil|audit|expertise comptable", secteur) ~ "Conseil et Audit",
+    
+    # Secteur : Fonction Publique et Gouvernement
+    grepl("(?i)fonction publique|gouvernement|défense nationale|administration publique|ministère", secteur) ~ "Fonction Publique",
+    
+    # Secteur : Agriculture et Développement Rural
+    grepl("(?i)agriculture|développement rural|ingénieur statisticien agricole", secteur) ~ "Agriculture et Développement Rural",
+    
+    # Secteur : Éducation et Académique
+    grepl("(?i)éducation|enseignement|académique|university", secteur) ~ "Éducation et Académique",
+    
+    # Secteur : Santé et Santé Publique
+    grepl("(?i)santé|santé publique|bio statistiques", secteur) ~ "Santé et Santé Publique",
+    
+    # Secteur : Informatique et Télécommunications
+    grepl("(?i)informatique|télécommunications|télécoms", secteur) ~ "Informatique et Télécom",
+    
+    # Secteur : Statistiques et Économie
+    grepl("(?i)statistique|économie|planification|modélisation|macroéconomique", secteur) ~ "Statistiques et Économie",
+    
+    # Secteur : Transport et Logistique
+    grepl("(?i)transport|logistique", secteur) ~ "Transport et Logistique",
+    
+    # Secteur : Humanitaire et ONG
+    grepl("(?i)humanitaire|organisation internationale", secteur) ~ "Humanitaire et ONG",
+    
+    # Secteur : Marketing et Communication
+    grepl("(?i)marketing|communication|multimédia|édition", secteur) ~ "Marketing et Communication",
+    
+    # Secteur : Industrie et Services
+    grepl("(?i)industrie|services aux entreprises|plastic|caoutchouc|travaux publics|parapublique", secteur) ~ "Industrie et Services",
+    
+    # Catégorie : Autre
+    grepl("(?i)autre|//|ras", secteur) ~ "Autre",
+    
+    # Par défaut, conserver la valeur d'origine
+    TRUE ~ secteur
+  )
+}
+
+
+data$Secteur_Activite_recode <- recoder_secteur(data$Secteur_Activite)
+
+# Vérification des résultats
+#table(data$Secteur_Activite_recode)
+```
+
+```{r}
+# Load necessary libraries
+library(plotly)
+library(dplyr)
+
+# Prepare the data: Count frequencies of each category in Poste_recode
+poste_data <- data %>%
+  filter(!is.na(Secteur_Activite_recode) & (data$source == "data-anniv"))%>%
+  count(Secteur_Activite_recode) %>%
+  arrange(desc(n))
+
+# Assuming 'couleurs$multi' is a vector of colors
+# Ensure it has enough colors for the categories
+color_palette <- couleurs$multi[1:nrow(poste_data)]
+
+# Create a treemap with custom colors
+fig <- plot_ly(
+  type = "treemap",
+  labels = poste_data$Secteur_Activite_recode,
+  parents = rep("", nrow(poste_data)),  # No hierarchy, so all are at the same level
+  values = poste_data$n,
+  textinfo = "label+percent entry", # +value
+  marker = list(colors = color_palette)
+)
+
+# Show the plot
+fig
+```
+
+
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+
+# Comptage des secteurs recodés
+secteur_counts <- data %>%
+  filter(Secteur_Activite_recode!="Autre") %>%
+  count(Secteur_Activite_recode, name = "count")
+
+# Génération du word cloud
+set.seed(13)  # Pour la reproductibilité
+wordcloud(
+  words = secteur_counts$Secteur_Activite_recode,
+  freq = secteur_counts$count,
+  scale=c(3,.5),
+  min.freq = 0,
+  max.words = 100,
+  random.order = FALSE,
+  rot.per = 0.0,
+  colors = couleurs$multi,  # Utilisation de la palette définie
+)
+```
+
+
+```{r}
+library(wordcloud)
+library(RColorBrewer)
+
+# Comptage des secteurs recodés
+secteur_counts <- data %>%
+  filter((Secteur_Activite!="Autre") & (data$source != "data-1")) %>%
+  count(Secteur_Activite, name = "count")
+
+# Génération du word cloud
+set.seed(123)  # Pour la reproductibilité
+wordcloud(
+  words = secteur_counts$Secteur_Activite,
+  freq = secteur_counts$count,
+  min.freq = 1,
+  max.words = 100,
+  random.order = FALSE,
+  rot.per = 0.35,
+  colors = couleurs$multi  # Utilisation de la palette définie
+)
+```
+
+# Salaire
+
+
+```{r}
+table(data$`Quelle est votre tranche de revenu mensuel net ? (FCFA)`)
+```
+
+```{r}
+
+# Définition de l'ordre des tranches de revenu
+ordre_salaire <- c(
+  "moins de 200 000",
+  "200 000 - 500 000",
+  "500 000 - 1 000 000",
+  "1 000 000 - 2 000 000",
+  "> 2 000 000"
+)
+
+# Préparation des données avec tri personnalisé
+p_data <- data %>% 
+  filter(!is.na(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`)) %>%
+  count(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`) %>% 
+  summarise(
+    level = `Quelle est votre tranche de revenu mensuel net ? (FCFA)`,
+    freq = n / sum(n) * 100,
+    freq_label = paste0(round(freq, 1), "%")
+  ) %>%
+  mutate(level = factor(level, levels = ordre_salaire)) %>%  # Application de l'ordre défini
+  arrange(level)  # Tri par ordre croissant des tranches
+
+# Création du graphique en barres horizontales triées
+fig <- plot_ly(
+  p_data[!is.na(p_data$level), ], 
+  y = ~freq, 
+  x = ~level, 
+  type = 'bar', 
+  # orientation = 'h',
+  text = ~freq_label,
+  textposition = 'auto',
+  marker = list(
+    color = couleurs$multi, 
+    line = list(color = 'rgb(8,48,107)', width = .5)
+  )
+) %>%
+  layout(
+    title = list(
+      text = "<b>Salaire mensuel des Alumni</b>", 
+      font = list(size = 16, color = '#333')
+    ),
+    yaxis = list(
+      title = "<b>Fréquence (%)</b>",
+      ticksuffix = "%",
+      gridcolor = 'rgba(200,200,200,0.3)'
+    ),
+    xaxis = list(title = " ", title_standoff = 20),
+    margin = list(l = 150),  # Ajustement pour les labels longs
+    showlegend = FALSE
+  )
+
+fig
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+ordre_salaire_short <- c(
+ " < 200K", 
+  "200K - 500K", 
+  "500K - 1M", 
+  "1M - 2M", 
+  "> 2M"
+)
+
+
+# Ensure the colors match each revenue level
+p_data <- data %>% 
+  filter(!is.na(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`), 
+         !is.na(diplome_2)) %>% 
+  count(diplome_2, `Quelle est votre tranche de revenu mensuel net ? (FCFA)`) %>%
+  group_by(diplome_2) %>%
+  mutate(
+    freq = n / sum(n) * 100,
+    freq_label = paste0(round(freq, 1), "%"),
+    level = factor(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`, levels = ordre_salaire)
+  ) %>%
+  ungroup()
+
+# Assign colors from `couleurs$multi` to each level of `level`
+color_mapping <- setNames(couleurs$multi, ordre_salaire_short)
+p_data <- p_data %>% 
+  mutate(
+    revenu = recode(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`,
+                    "moins de 200 000" = " < 200K",
+                    "200 000 - 500 000" = "200K - 500K",
+                    "500 000 - 1 000 000" = "500K - 1M",
+                    "1 000 000 - 2 000 000" = "1M - 2M",
+                    "> 2 000 000" = "> 2M"),
+    revenu = factor(revenu, levels = ordre_salaire_short)
+  )
+    
+# Create ggplot2 plot
+gg <- ggplot(p_data, aes(x = revenu, y = freq, fill = revenu)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7)) +
+  # geom_text(aes(label = freq_label), vjust = 2, size = 3) +
+  facet_wrap(~ diplome_2) +  # Share x-axis but allow y to vary  scales = "free_y"
+  scale_fill_manual(values = color_mapping) +  # Use custom colors
+  labs(
+    title = " ",
+    x = " ",
+    y = " ",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 13, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+
+# Convert to interactive plotly plot
+fig <- ggplotly(gg) %>%
+  layout(
+    xaxis = list(title = "Tranche de revenu mensuel (FCFA)"),
+    yaxis = list(title = "Fréquence (%)"),
+    margin = list(l = 50, r = 50, t = 50, b = 50)
+  )
+
+fig
+```
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+ordre_salaire_short <- c(
+ " < 200K", 
+  "200K - 500K", 
+  "500K - 1M", 
+  "1M - 2M", 
+  "> 2M"
+)
+
+
+# Ensure the colors match each revenue level
+p_data <- data %>% 
+  filter(!is.na(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`), 
+         !is.na(Pays_Residence_recode)) %>% 
+  count(Pays_Residence_recode, `Quelle est votre tranche de revenu mensuel net ? (FCFA)`) %>%
+  group_by(Pays_Residence_recode) %>%
+  mutate(
+    freq = n / sum(n) * 100,
+    freq_label = paste0(round(freq, 1), "%"),
+    level = factor(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`, levels = ordre_salaire)
+  ) %>%
+  ungroup()
+
+# Assign colors from `couleurs$multi` to each level of `level`
+color_mapping <- setNames(couleurs$multi, ordre_salaire_short)
+p_data <- p_data %>% 
+  mutate(
+    revenu = recode(`Quelle est votre tranche de revenu mensuel net ? (FCFA)`,
+                    "moins de 200 000" = " < 200K",
+                    "200 000 - 500 000" = "200K - 500K",
+                    "500 000 - 1 000 000" = "500K - 1M",
+                    "1 000 000 - 2 000 000" = "1M - 2M",
+                    "> 2 000 000" = "> 2M"),
+    revenu = factor(revenu, levels = ordre_salaire_short)
+  )
+    
+# Create ggplot2 plot
+gg <- ggplot(p_data, aes(x = revenu, y = freq, fill = revenu)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.7)) +
+  # geom_text(aes(label = freq_label), vjust = 2, size = 3) +
+  facet_wrap(~ Pays_Residence_recode) +  # Share x-axis but allow y to vary  scales = "free_y"
+  scale_fill_manual(values = color_mapping) +  # Use custom colors
+  labs(
+    title = " ",
+    x = " ",
+    y = " ",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 13, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+
+# Convert to interactive plotly plot
+fig <- ggplotly(gg) %>%
+  layout(
+    xaxis = list(title = "Tranche de revenu mensuel (FCFA)"),
+    yaxis = list(title = "Fréquence (%)"),
+    margin = list(l = 50, r = 50, t = 50, b = 50)
+  )
+fig
+```
+
+```{r}
+
+```
+
